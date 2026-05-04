@@ -22,6 +22,7 @@ import com.example.poseexercise.data.PostureResult
 import com.example.poseexercise.data.ExerciseAnalysisResult
 import com.example.poseexercise.data.plan.Plan
 import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor
+import com.example.poseexercise.posedetector.logic.AnalysisResult
 import com.example.poseexercise.posedetector.logic.ExerciseLogic
 import com.example.poseexercise.posedetector.logic.ExerciseLogicFactory
 import com.example.poseexercise.posedetector.logic.FeedbackEngine
@@ -67,6 +68,7 @@ class PoseDetectorProcessor(
         val pose: Pose,
         classificationResult: Map<String, PostureResult>
     ) {
+        var analysis: AnalysisResult? = null
 
         init {
             // update live data value
@@ -75,33 +77,39 @@ class PoseDetectorProcessor(
             }
             
             // Run new analysis logic
-            if (pose.getAllPoseLandmarks().isNotEmpty()) {
-                val validation = cameraValidator.validateSetup(pose)
-                val analysis = exerciseLogic?.analyze(pose)
+            val landmarks = pose.getAllPoseLandmarks()
+            if (landmarks.isNotEmpty()) {
+                // Count high-confidence landmarks to prevent ghost detection
+                val highConfidenceCount = landmarks.count { it.inFrameLikelihood > 0.5f }
                 
-                if (analysis != null) {
-                    val combinedFeedback = analysis.feedback.toMutableList()
-                    // Add camera warning if present
+                if (highConfidenceCount >= 6) {
+                    val validation = cameraValidator.validateSetup(pose)
+                    analysis = exerciseLogic?.analyze(pose)
+                    
+                    val combinedFeedback = mutableListOf<String>()
+                    if (analysis != null) {
+                        combinedFeedback.addAll(analysis!!.feedback)
+                    }
                     if (!validation.first && validation.second != null) {
                         combinedFeedback.add(validation.second!!)
                     }
                     
                     val filteredFeedback = feedbackEngine.getFilteredFeedback(combinedFeedback)
                     val finalResult = ExerciseAnalysisResult(
-                        analysis.exercise,
-                        analysis.repCount,
-                        analysis.currentState.name,
-                        analysis.formScore,
+                        analysis?.exercise ?: "",
+                        analysis?.repCount ?: 0,
+                        analysis?.currentState?.name ?: "",
+                        analysis?.formScore ?: 0,
                         filteredFeedback,
-                        analysis.angles
+                        analysis?.angles ?: emptyMap()
                     )
                     cameraXViewModel?.analysisLiveData?.postValue(finalResult)
-                } else if (!validation.first) {
-                    // If no analysis logic, just show camera warning
-                    val warningResult = ExerciseAnalysisResult(
-                        "", 0, "", 0, validation.second, emptyMap()
+                } else {
+                    // No person detected with enough confidence
+                    val emptyResult = ExerciseAnalysisResult(
+                        "", 0, "", 0, null, emptyMap()
                     )
-                    cameraXViewModel?.analysisLiveData?.postValue(warningResult)
+                    cameraXViewModel?.analysisLiveData?.postValue(emptyResult)
                 }
             }
         }
@@ -112,8 +120,12 @@ class PoseDetectorProcessor(
         classificationExecutor = Executors.newSingleThreadExecutor()
         if (notCompletedExercise.isNotEmpty()) {
             exercisesToDetect = notCompletedExercise.map { plan -> plan.exercise }
-            // Initialize the first exercise logic for now
-            exerciseLogic = ExerciseLogicFactory.getLogic(exercisesToDetect!![0])
+            // Initialize the first exercise logic
+            val firstExercise = exercisesToDetect?.getOrNull(0)
+            if (firstExercise != null) {
+                exerciseLogic = ExerciseLogicFactory.getLogic(firstExercise)
+                Log.d("PoseDetectorProcessor", "Initialized exercise logic for: $firstExercise")
+            }
         }
     }
 
@@ -181,7 +193,8 @@ class PoseDetectorProcessor(
                 poseWithClassification.pose,
                 showInFrameLikelihood,
                 visualizeZ,
-                rescaleZForVisualization
+                rescaleZForVisualization,
+                poseWithClassification.analysis
             )
         )
     }

@@ -20,6 +20,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import com.example.poseexercise.views.graphic.GraphicOverlay.Graphic
+import com.example.poseexercise.posedetector.logic.AnalysisResult
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
 import java.util.Locale
@@ -31,24 +32,41 @@ internal constructor(
     private val pose: Pose,
     private val showInFrameLikelihood: Boolean,
     private val visualizeZ: Boolean,
-    private val rescaleZForVisualization: Boolean
+    private val rescaleZForVisualization: Boolean,
+    private val analysisResult: AnalysisResult? = null
 ) : Graphic(overlay) {
     private var zMin = java.lang.Float.MAX_VALUE
     private var zMax = java.lang.Float.MIN_VALUE
     private val leftPaint: Paint
     private val rightPaint: Paint
     private val whitePaint: Paint = Paint()
+    private val correctPaint: Paint
+    private val incorrectPaint: Paint
+    private val textPaint: Paint = Paint()
 
     init {
         whitePaint.strokeWidth = STROKE_WIDTH
         whitePaint.color = Color.WHITE
         whitePaint.textSize = IN_FRAME_LIKELIHOOD_TEXT_SIZE
+        
+        textPaint.color = Color.WHITE
+        textPaint.textSize = 40f
+        textPaint.style = Paint.Style.FILL
+        
         leftPaint = Paint()
         leftPaint.strokeWidth = STROKE_WIDTH
         leftPaint.color = Color.GREEN
         rightPaint = Paint()
         rightPaint.strokeWidth = STROKE_WIDTH
         rightPaint.color = Color.YELLOW
+
+        correctPaint = Paint()
+        correctPaint.strokeWidth = STROKE_WIDTH
+        correctPaint.color = Color.GREEN
+
+        incorrectPaint = Paint()
+        incorrectPaint.strokeWidth = STROKE_WIDTH
+        incorrectPaint.color = Color.RED
     }
 
     override fun draw(canvas: Canvas) {
@@ -102,6 +120,35 @@ internal constructor(
         val leftFootIndex = pose.getPoseLandmark(PoseLandmark.LEFT_FOOT_INDEX)
         val rightFootIndex = pose.getPoseLandmark(PoseLandmark.RIGHT_FOOT_INDEX)
 
+        // Determine paints based on feedback
+        var leftLegPaint = correctPaint
+        var rightLegPaint = rightPaint // Keep right side yellow for contrast
+        var leftArmPaint = correctPaint
+        var rightArmPaint = rightPaint
+        var trunkPaint = correctPaint
+
+        analysisResult?.let { result ->
+            when (result.exercise.lowercase()) {
+                "squat" -> {
+                    if (result.feedback.contains("Go lower")) {
+                        leftLegPaint = incorrectPaint
+                        rightLegPaint = incorrectPaint
+                    }
+                    if (result.feedback.contains("Keep back straight")) {
+                        trunkPaint = incorrectPaint
+                    }
+                }
+                "pushup", "push-up" -> {
+                    if (result.feedback.contains("Keep body straight")) {
+                        trunkPaint = incorrectPaint
+                        leftLegPaint = incorrectPaint
+                        rightLegPaint = incorrectPaint
+                    }
+                }
+                else -> {}
+            }
+        }
+
         // Face
         drawLine(canvas, nose, leftEyeInner, whitePaint)
         drawLine(canvas, leftEyeInner, leftEye, whitePaint)
@@ -113,34 +160,70 @@ internal constructor(
         drawLine(canvas, rightEyeOuter, rightEar, whitePaint)
         drawLine(canvas, leftMouth, rightMouth, whitePaint)
 
-        drawLine(canvas, leftShoulder, rightShoulder, whitePaint)
-        drawLine(canvas, leftHip, rightHip, whitePaint)
+        drawLine(canvas, leftShoulder, rightShoulder, trunkPaint)
+        drawLine(canvas, leftHip, rightHip, trunkPaint)
 
         // Left body
-        drawLine(canvas, leftShoulder, leftElbow, leftPaint)
-        drawLine(canvas, leftElbow, leftWrist, leftPaint)
-        drawLine(canvas, leftShoulder, leftHip, leftPaint)
-        drawLine(canvas, leftHip, leftKnee, leftPaint)
-        drawLine(canvas, leftKnee, leftAnkle, leftPaint)
-        drawLine(canvas, leftWrist, leftThumb, leftPaint)
-        drawLine(canvas, leftWrist, leftPinky, leftPaint)
-        drawLine(canvas, leftWrist, leftIndex, leftPaint)
-        drawLine(canvas, leftIndex, leftPinky, leftPaint)
-        drawLine(canvas, leftAnkle, leftHeel, leftPaint)
-        drawLine(canvas, leftHeel, leftFootIndex, leftPaint)
+        drawLine(canvas, leftShoulder, leftElbow, leftArmPaint)
+        drawLine(canvas, leftElbow, leftWrist, leftArmPaint)
+        drawLine(canvas, leftShoulder, leftHip, trunkPaint)
+        drawLine(canvas, leftHip, leftKnee, leftLegPaint)
+        drawLine(canvas, leftKnee, leftAnkle, leftLegPaint)
+        drawLine(canvas, leftWrist, leftThumb, leftArmPaint)
+        drawLine(canvas, leftWrist, leftPinky, leftArmPaint)
+        drawLine(canvas, leftWrist, leftIndex, leftArmPaint)
+        drawLine(canvas, leftIndex, leftPinky, leftArmPaint)
+        drawLine(canvas, leftAnkle, leftHeel, leftLegPaint)
+        drawLine(canvas, leftHeel, leftFootIndex, leftLegPaint)
 
         // Right body
-        drawLine(canvas, rightShoulder, rightElbow, rightPaint)
-        drawLine(canvas, rightElbow, rightWrist, rightPaint)
-        drawLine(canvas, rightShoulder, rightHip, rightPaint)
-        drawLine(canvas, rightHip, rightKnee, rightPaint)
-        drawLine(canvas, rightKnee, rightAnkle, rightPaint)
-        drawLine(canvas, rightWrist, rightThumb, rightPaint)
-        drawLine(canvas, rightWrist, rightPinky, rightPaint)
-        drawLine(canvas, rightWrist, rightIndex, rightPaint)
-        drawLine(canvas, rightIndex, rightPinky, rightPaint)
-        drawLine(canvas, rightAnkle, rightHeel, rightPaint)
-        drawLine(canvas, rightHeel, rightFootIndex, rightPaint)
+        drawLine(canvas, rightShoulder, rightElbow, rightArmPaint)
+        drawLine(canvas, rightElbow, rightWrist, rightArmPaint)
+        drawLine(canvas, rightShoulder, rightHip, trunkPaint)
+        drawLine(canvas, rightHip, rightKnee, rightLegPaint)
+        drawLine(canvas, rightKnee, rightAnkle, rightLegPaint)
+        drawLine(canvas, rightWrist, rightThumb, rightArmPaint)
+        drawLine(canvas, rightWrist, rightPinky, rightArmPaint)
+        drawLine(canvas, rightWrist, rightIndex, rightArmPaint)
+        drawLine(canvas, rightIndex, rightPinky, rightArmPaint)
+        drawLine(canvas, rightAnkle, rightHeel, rightLegPaint)
+        drawLine(canvas, rightHeel, rightFootIndex, rightLegPaint)
+
+        // Draw angles if available
+        analysisResult?.let { result ->
+            when (result.exercise.lowercase()) {
+                "squat" -> {
+                    result.angles["knee_smooth"]?.let { angle ->
+                        val knee = leftKnee ?: rightKnee
+                        knee?.let {
+                            val color = if (result.feedback.contains("Go lower")) Color.RED else Color.GREEN
+                            drawText(canvas, "${angle.toInt()}°", it, color)
+                        }
+                    }
+                    result.angles["back_angle"]?.let { angle ->
+                        val hip = leftHip ?: rightHip
+                        hip?.let {
+                            val color = if (result.feedback.contains("Keep back straight")) Color.RED else Color.GREEN
+                            drawText(canvas, "${angle.toInt()}°", it, color)
+                        }
+                    }
+                }
+                "pushup", "push-up" -> {
+                    result.angles["elbow_smooth"]?.let { angle ->
+                        val elbow = leftElbow ?: rightElbow
+                        elbow?.let { drawText(canvas, "${angle.toInt()}°", it, Color.GREEN) }
+                    }
+                    result.angles["body_alignment"]?.let { angle ->
+                        val hip = leftHip ?: rightHip
+                        hip?.let {
+                            val color = if (result.feedback.contains("Keep body straight")) Color.RED else Color.GREEN
+                            drawText(canvas, "${angle.toInt()}°", it, color)
+                        }
+                    }
+                }
+                else -> {}
+            }
+        }
 
         // Draw inFrameLikelihood for all points
         if (showInFrameLikelihood) {
@@ -155,12 +238,22 @@ internal constructor(
         }
     }
 
+    private fun drawText(canvas: Canvas, text: String, landmark: PoseLandmark, color: Int) {
+        textPaint.color = color
+        canvas.drawText(
+            text,
+            translateX(landmark.position.x) + 30f,
+            translateY(landmark.position.y),
+            textPaint
+        )
+    }
+
     private fun drawPoint(canvas: Canvas, landmark: PoseLandmark, paint: Paint) {
         val point = landmark.position3D
         updatePaintColorByZValue(
             paint,
             canvas,
-            visualizeZ,
+            visualizeZ && analysisResult == null,
             rescaleZForVisualization,
             point.z,
             zMin,
@@ -183,7 +276,7 @@ internal constructor(
         updatePaintColorByZValue(
             paint,
             canvas,
-            visualizeZ,
+            visualizeZ && analysisResult == null,
             rescaleZForVisualization,
             avgZInImagePixel,
             zMin,

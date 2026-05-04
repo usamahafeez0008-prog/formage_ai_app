@@ -13,8 +13,10 @@ class PushupLogic : ExerciseLogic {
     private var minElbowAngle = 180.0
     private var feedbackList = mutableListOf<String>()
     private var smoothedElbowAngle = -1.0
-    private val SMOOTHING_FACTOR = 0.2
+    private val SMOOTHING_FACTOR = 0.15
     private var isInitialized = false
+    private var stateFrameCount = 0
+    private val MIN_STATE_FRAMES = 3
 
     override fun analyze(pose: Pose): AnalysisResult {
         val landmarks = pose.getAllPoseLandmarks()
@@ -63,7 +65,7 @@ class PushupLogic : ExerciseLogic {
             angles["left_elbow"] = leftElbowAngle
             angles["right_elbow"] = rightElbowAngle
 
-            // Body Alignment: Shoulder -> Hip -> Ankle (Requirement 8.E)
+            // Body Alignment: Shoulder -> Hip -> Ankle
             if (leftHip != null && leftAnkle != null && rightHip != null && rightAnkle != null) {
                 val leftBodyAngle = JointAngleCalculator.calculateAngle(leftShoulder, leftHip, leftAnkle)
                 val rightBodyAngle = JointAngleCalculator.calculateAngle(rightShoulder, rightHip, rightAnkle)
@@ -77,7 +79,7 @@ class PushupLogic : ExerciseLogic {
                 }
             }
 
-            // Neck Position: Nose vs Shoulder level (Requirement 8.F)
+            // Neck Position: Nose vs Shoulder level
             if (nose != null) {
                 val shoulderY = (leftShoulder.position.y + rightShoulder.position.y) / 2
                 if (nose.position.y > shoulderY + 0.05) { // Threshold for drooping
@@ -85,7 +87,7 @@ class PushupLogic : ExerciseLogic {
                 }
             }
 
-            // State Machine (Requirement 6)
+            // State Machine
             processState(smoothedElbowAngle)
         }
 
@@ -111,9 +113,9 @@ class PushupLogic : ExerciseLogic {
                 }
             }
             ExerciseState.DESCENDING -> {
-                if (elbowAngle < 90.0) { // Requirement 8.D
+                if (elbowAngle < 90.0) {
                     currentState = ExerciseState.BOTTOM
-                } else if (elbowAngle > 160.0) {
+                } else if (elbowAngle > 165.0) {
                     currentState = ExerciseState.STANDING
                     minElbowAngle = 180.0
                 }
@@ -125,13 +127,20 @@ class PushupLogic : ExerciseLogic {
             }
             ExerciseState.ASCENDING -> {
                 if (elbowAngle > 160.0) {
-                    repCount++
-                    currentState = ExerciseState.COMPLETED
+                    stateFrameCount++
+                    if (stateFrameCount >= MIN_STATE_FRAMES) {
+                        repCount++
+                        currentState = ExerciseState.COMPLETED
+                        stateFrameCount = 0
+                    }
+                } else {
+                    stateFrameCount = 0
                 }
             }
             ExerciseState.COMPLETED -> {
                 currentState = ExerciseState.STANDING
                 minElbowAngle = 180.0
+                stateFrameCount = 0
             }
         }
     }

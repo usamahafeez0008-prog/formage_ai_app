@@ -8,7 +8,7 @@ import android.os.SystemClock
 class FeedbackEngine {
     private val feedbackStartTime = mutableMapOf<String, Long>()
     private val COOLDOWN_MS = 500L
-    private val PERSISTENCE_THRESHOLD_MS = 300L
+    private val PERSISTENCE_THRESHOLD_MS = 100L
 
     // Priority map: higher value = higher priority
     private val priorityMap = mapOf(
@@ -16,10 +16,13 @@ class FeedbackEngine {
         "Knees collapsing inward" to 90,
         "Keep body straight" to 80,
         "Keep back straight" to 70,
+        "Feets too narrow" to 65,
+        "Feets too wide" to 65,
         "Go lower" to 60,
         "Keep neck neutral" to 50,
-        "Move farther from camera" to 40,
-        "Move down a bit" to 30
+        "Move farther from camera" to 20,
+        "Full body not visible" to 15,
+        "Move down a bit" to 10
     )
 
     /**

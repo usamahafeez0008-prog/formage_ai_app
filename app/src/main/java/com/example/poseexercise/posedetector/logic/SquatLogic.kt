@@ -14,8 +14,10 @@ class SquatLogic : ExerciseLogic {
     private var feedbackList = mutableListOf<String>()
     private var smoothedKneeAngle = -1.0
     private var smoothedBackAngle = -1.0
-    private val SMOOTHING_FACTOR = 0.2
+    private val SMOOTHING_FACTOR = 0.15
     private var isInitialized = false
+    private var stateFrameCount = 0
+    private val MIN_STATE_FRAMES = 3
 
     override fun analyze(pose: Pose): AnalysisResult {
         val landmarks = pose.getAllPoseLandmarks()
@@ -58,17 +60,12 @@ class SquatLogic : ExerciseLogic {
             angles["knee_raw"] = rawKneeAngle
             angles["knee_smooth"] = smoothedKneeAngle
 
-            // ... back angle logic ...
-            // State Machine & Rep Counting
-            processState(smoothedKneeAngle)
-
-            // Calculate back angle (Shoulder - Hip - Ankle) (Requirement 8.B)
+            // Calculate back angle (Shoulder - Hip - Ankle)
             if (leftShoulder != null && leftAnkle != null && rightShoulder != null && rightAnkle != null) {
                 val leftBackAngle = JointAngleCalculator.calculateAngle(leftShoulder, leftHip, leftAnkle)
                 val rightBackAngle = JointAngleCalculator.calculateAngle(rightShoulder, rightHip, rightAnkle)
                 val rawBackAngle = (leftBackAngle + rightBackAngle) / 2
                 
-                // Apply EMA smoothing
                 if (smoothedBackAngle < 0) {
                     smoothedBackAngle = rawBackAngle
                 } else {
@@ -81,12 +78,31 @@ class SquatLogic : ExerciseLogic {
                 }
             }
 
+            // State Machine & Rep Counting
+            processState(smoothedKneeAngle)
             
-            // Validation: Depth Check (Requirement 8.A)
+            // Validation: Depth Check
             if (currentState == ExerciseState.BOTTOM || currentState == ExerciseState.ASCENDING) {
                 if (minKneeAngle > 110.0) {
                     feedbackList.add("Go lower")
                 }
+            }
+
+            // Stance and Knee Alignment Checks
+            val hipWidth = Math.abs(leftHip.position.x - rightHip.position.x)
+            val kneeWidth = Math.abs(leftKnee.position.x - rightKnee.position.x)
+            val ankleWidth = Math.abs(leftAnkle.position.x - rightAnkle.position.x)
+
+            // Knees collapsing inward
+            if (kneeWidth < hipWidth * 0.8) {
+                feedbackList.add("Knees collapsing inward")
+            }
+
+            // Stance checks
+            if (ankleWidth < hipWidth * 1.0) {
+                feedbackList.add("Stance too narrow")
+            } else if (ankleWidth > hipWidth * 1.6) {
+                feedbackList.add("Stance too wide")
             }
         }
 
@@ -108,35 +124,39 @@ class SquatLogic : ExerciseLogic {
 
         when (currentState) {
             ExerciseState.STANDING -> {
-                if (kneeAngle < 160.0) {
+                if (kneeAngle < 155.0) {
                     currentState = ExerciseState.DESCENDING
                 }
             }
             ExerciseState.DESCENDING -> {
                 if (kneeAngle < 95.0) {
                     currentState = ExerciseState.BOTTOM
-                } else if (kneeAngle > 165.0) {
-                    // Reset if they stood back up without completing
+                } else if (kneeAngle > 170.0) {
                     currentState = ExerciseState.STANDING
                     minKneeAngle = 180.0
                 }
             }
             ExerciseState.BOTTOM -> {
-                if (kneeAngle > 100.0) {
+                if (kneeAngle > 105.0) {
                     currentState = ExerciseState.ASCENDING
                 }
             }
             ExerciseState.ASCENDING -> {
                 if (kneeAngle > 165.0) {
-                    // Rep Completed (Requirement 7)
-                    repCount++
-                    currentState = ExerciseState.COMPLETED
+                    stateFrameCount++
+                    if (stateFrameCount >= MIN_STATE_FRAMES) {
+                        repCount++
+                        currentState = ExerciseState.COMPLETED
+                        stateFrameCount = 0
+                    }
+                } else {
+                    stateFrameCount = 0
                 }
             }
             ExerciseState.COMPLETED -> {
-                // Reset for next rep
                 currentState = ExerciseState.STANDING
                 minKneeAngle = 180.0
+                stateFrameCount = 0
             }
         }
     }

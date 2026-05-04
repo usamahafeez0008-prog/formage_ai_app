@@ -17,26 +17,37 @@ class CameraValidator {
             return Pair(false, "No body detected")
         }
 
-        // Essential landmarks for most exercises
         val essentialLandmarks = listOf(
             PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
-            PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP,
+            PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP
+        )
+
+        val missingEssential = essentialLandmarks.filter { type ->
+            val landmark = pose.getPoseLandmark(type)
+            landmark == null || landmark.inFrameLikelihood < 0.4f
+        }
+
+        if (missingEssential.isNotEmpty()) {
+            return Pair(false, "Move farther from camera")
+        }
+
+        // Check for legs visibility (needed for squats)
+        val legLandmarks = listOf(
             PoseLandmark.LEFT_KNEE, PoseLandmark.RIGHT_KNEE,
             PoseLandmark.LEFT_ANKLE, PoseLandmark.RIGHT_ANKLE
         )
-
-        val missingOrLowVisibility = essentialLandmarks.filter { type ->
+        val missingLegs = legLandmarks.count { type ->
             val landmark = pose.getPoseLandmark(type)
-            landmark == null || landmark.inFrameLikelihood < 0.5f
+            landmark == null || landmark.inFrameLikelihood < 0.4f
         }
 
-        if (missingOrLowVisibility.isNotEmpty()) {
-            return Pair(false, "Move farther from camera")
+        if (missingLegs > 2) {
+            return Pair(false, "Full body not visible")
         }
 
         // Check for "Too Close" (shoulders too high in frame)
         val leftShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
-        if (leftShoulder != null && leftShoulder.position.y < 0.1f) {
+        if (leftShoulder != null && leftShoulder.position.y < 0.05f) {
             return Pair(false, "Move down a bit")
         }
 
