@@ -59,6 +59,13 @@ object Constants {
                 calorie = 9.0,
                 level = "Advance"
             ),
+            Exercise(
+                id = 8,
+                name = "Bicep curl",
+                image = R.drawable.dumbell,
+                calorie = 3.5,
+                level = "Intermediate"
+            ),
         )
     }
 }

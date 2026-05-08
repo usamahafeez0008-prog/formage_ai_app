@@ -55,6 +55,7 @@ public class PoseClassifierProcessor {
     private static final String LUNGE_FILE = "pose/lunges.csv";
     private static final String NEUTRAL_STANDING_FILE = "pose/neutral_standing.csv";
     private static final String SIT_UP_FILE = "pose/situps.csv";
+    private static final String BICEP_CURL_FILE = "pose/bicep_curl.csv";
     private static final String CHEST_PRESS_FILE = "pose/chestpress.csv";
     private static final String DEAD_LIFT_FILE = "pose/deadlift.csv";
     private static final String SHOULDER_PRESS_FILE = "pose/shoulderpress.csv";
@@ -67,13 +68,14 @@ public class PoseClassifierProcessor {
     public static final String SQUATS_CLASS = "squats";
     public static final String LUNGES_CLASS = "lunges";
     public static final String SITUP_UP_CLASS = "situp_up";
+    public static final String BICEP_CURL_CLASS = "bicep_curl";
     public static final String CHEST_PRESS_CLASS = "chestpress_down";
     public static final String DEAD_LIFT_CLASS = "deadlift_down";
     public static final String SHOULDER_PRESS_CLASS = "shoulderpress_down";
     public static final String WARRIOR_CLASS = "warrior";
     public static final String YOGA_TREE_CLASS = "tree_pose";
     public static final String[] POSE_CLASSES = {
-            PUSHUPS_CLASS, SQUATS_CLASS, LUNGES_CLASS, SITUP_UP_CLASS, CHEST_PRESS_CLASS, DEAD_LIFT_CLASS, SHOULDER_PRESS_CLASS, WARRIOR_CLASS, YOGA_TREE_CLASS
+            PUSHUPS_CLASS, SQUATS_CLASS, LUNGES_CLASS, SITUP_UP_CLASS, BICEP_CURL_CLASS, CHEST_PRESS_CLASS, DEAD_LIFT_CLASS, SHOULDER_PRESS_CLASS, WARRIOR_CLASS, YOGA_TREE_CLASS
     };
 
     private final boolean isStreamMode;
@@ -161,6 +163,8 @@ public class PoseClassifierProcessor {
                     }
                     case "Push up" -> addUniqueFile(files, uniqueFileNames, PUSH_UP_FILE);
                     case "Sit up" -> addUniqueFile(files, uniqueFileNames, SIT_UP_FILE);
+                    case "Bicep curl", "Biceps curl" ->
+                            addUniqueFile(files, uniqueFileNames, BICEP_CURL_FILE);
                     case "Lunge" -> {
                         addUniqueFile(files, uniqueFileNames, LUNGE_FILE);
                         addUniqueFile(files, uniqueFileNames, NEUTRAL_STANDING_FILE);

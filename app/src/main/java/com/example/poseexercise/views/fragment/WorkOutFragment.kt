@@ -15,8 +15,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -45,9 +47,11 @@ import com.example.poseexercise.data.plan.ExercisePlan
 import com.example.poseexercise.data.plan.Plan
 import com.example.poseexercise.data.results.WorkoutResult
 import com.example.poseexercise.posedetector.PoseDetectorProcessor
+import com.example.poseexercise.posedetector.logic.ExerciseLogicFactory
 import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.CHEST_PRESS_CLASS
 import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.DEAD_LIFT_CLASS
 import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.LUNGES_CLASS
+import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.BICEP_CURL_CLASS
 import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.POSE_CLASSES
 import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.PUSHUPS_CLASS
 import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.SHOULDER_PRESS_CLASS
@@ -107,6 +111,7 @@ class WorkOutFragment : Fragment(), MemoryManagement {
             PUSHUPS_CLASS,
             LUNGES_CLASS,
             SITUP_UP_CLASS,
+            BICEP_CURL_CLASS,
             CHEST_PRESS_CLASS,
             DEAD_LIFT_CLASS,
             SHOULDER_PRESS_CLASS
@@ -141,6 +146,11 @@ class WorkOutFragment : Fragment(), MemoryManagement {
     private lateinit var scoreTextView: TextView
     private lateinit var stateTextView: TextView
     private lateinit var debugTextView: TextView
+    private lateinit var todayPlanContainer: LinearLayout
+    private val planCheckBoxes = mutableMapOf<String, CheckBox>()
+    private val planTargets = mutableMapOf<String, Int>()
+    private var selectedPlanExercise: String? = null
+    private var latestExerciseLog: ExerciseLog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -187,6 +197,7 @@ class WorkOutFragment : Fragment(), MemoryManagement {
         scoreTextView = view.findViewById(R.id.scoreText)
         stateTextView = view.findViewById(R.id.stateText)
         debugTextView = view.findViewById(R.id.debugText)
+        todayPlanContainer = view.findViewById(R.id.todayPlanContainer)
         return view
     }
 
@@ -238,6 +249,7 @@ class WorkOutFragment : Fragment(), MemoryManagement {
         // 10 reps =  3.2 for push up -> 1 reps = 3.2/10
         // Complete the exercise
         val sitUp = Postures.situp
+        val bicepCurl = Postures.bicepCurl
         val pushUp = Postures.pushup
         val lunge = Postures.lunge
         val squat = Postures.squat
@@ -257,6 +269,7 @@ class WorkOutFragment : Fragment(), MemoryManagement {
                                 pushUp.type -> pushUp.value / 10
                                 lunge.type -> lunge.value / 10
                                 squat.type -> squat.value / 10
+                                bicepCurl.type -> bicepCurl.value / 10
                                 chestPress.type -> chestPress.value / 10
                                 deadLift.type -> deadLift.value / 10
                                 shoulderPress.type -> shoulderPress.value / 10
@@ -394,6 +407,10 @@ class WorkOutFragment : Fragment(), MemoryManagement {
                     databaseExercisePlan.add(exercisePlan)
                 }
             }
+            planTargets.clear()
+            databaseExercisePlan.forEach { plan ->
+                planTargets[plan.exerciseName] = (planTargets[plan.exerciseName] ?: 0) + plan.repetitions
+            }
             // Push the planned exercise name in exercise Log
             databaseExercisePlan.forEach {
                 exerciseLog.addExercise(
@@ -404,6 +421,10 @@ class WorkOutFragment : Fragment(), MemoryManagement {
                     false
                 )
             }
+            withContext(Dispatchers.Main) {
+                latestExerciseLog = exerciseLog
+                buildTodayPlanSelector(exerciseLog)
+            }
         }
 
         // Declare variables to store previous values
@@ -412,10 +433,11 @@ class WorkOutFragment : Fragment(), MemoryManagement {
 
         cameraViewModel.analysisLiveData.observe(viewLifecycleOwner) { result ->
             if (result != null) {
-                // Update feedback
-                if (result.feedback != null) {
+                val feedbackLine = result.primaryFeedback
+                    ?: result.feedback.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+                if (!feedbackLine.isNullOrBlank()) {
                     feedbackTextView.visibility = View.VISIBLE
-                    feedbackTextView.text = result.feedback
+                    feedbackTextView.text = feedbackLine
                 } else {
                     feedbackTextView.visibility = View.INVISIBLE
                 }
@@ -536,6 +558,7 @@ class WorkOutFragment : Fragment(), MemoryManagement {
                         val exerciseList = exerciseLog.getExerciseDataList()
                         workoutAdapter = WorkoutAdapter(exerciseList, databaseExercisePlan)
                         workoutRecyclerView.adapter = workoutAdapter
+                        updateTodayPlanSelector(exerciseLog)
                     } else if (key in onlyPose && value.confidence > 0.5) {
 
                         if (key !== previousKey || value.confidence !== previousConfidence) {
@@ -574,6 +597,7 @@ class WorkOutFragment : Fragment(), MemoryManagement {
                 val exerciseList = exerciseLog.getExerciseDataList()
                 workoutAdapter = WorkoutAdapter(exerciseList, databaseExercisePlan)
                 workoutRecyclerView.adapter = workoutAdapter
+                updateTodayPlanSelector(exerciseLog)
                 runOnce = true
                 loadingTV.visibility = View.GONE
                 loadProgress.visibility = View.GONE
@@ -587,12 +611,65 @@ class WorkOutFragment : Fragment(), MemoryManagement {
 
 
     // Map the notCompletedExercise list to a list of pairs to show gifs
+    private fun buildTodayPlanSelector(exerciseLog: ExerciseLog) {
+        if (!this::todayPlanContainer.isInitialized) return
+        todayPlanContainer.removeAllViews()
+        planCheckBoxes.clear()
+        val planExercises = planTargets.keys.toList()
+        if (planExercises.isEmpty()) return
+
+        planExercises.forEach { exerciseKey ->
+            val checkBox = CheckBox(requireContext())
+            checkBox.setTextColor(ContextCompat.getColor(requireContext(), R.color.white))
+            checkBox.textSize = 14f
+            checkBox.setPadding(8, 0, 20, 0)
+            checkBox.setOnClickListener {
+                selectPlanExercise(exerciseKey)
+            }
+            planCheckBoxes[exerciseKey] = checkBox
+            todayPlanContainer.addView(checkBox)
+        }
+        selectedPlanExercise = selectedPlanExercise ?: planExercises.first()
+        updateTodayPlanSelector(exerciseLog)
+        selectedPlanExercise?.let { applyManualExerciseSelection(it) }
+    }
+
+    private fun updateTodayPlanSelector(exerciseLog: ExerciseLog) {
+        planCheckBoxes.forEach { (exerciseKey, checkBox) ->
+            val target = planTargets[exerciseKey] ?: 0
+            val done = exerciseLog.getExerciseData(exerciseKey)?.repetitions ?: 0
+            val complete = target > 0 && done >= target
+            checkBox.isChecked = selectedPlanExercise == exerciseKey || complete
+            checkBox.text = "${exerciseNameToDisplay(exerciseKey)} ${done}/$target"
+            checkBox.alpha = if (complete) 0.95f else 1f
+        }
+    }
+
+    private fun selectPlanExercise(exerciseKey: String) {
+        selectedPlanExercise = exerciseKey
+        val log = latestExerciseLog
+        planCheckBoxes.forEach { (key, cb) ->
+            val target = planTargets[key] ?: 0
+            val done = log?.getExerciseData(key)?.repetitions ?: 0
+            val complete = target > 0 && done >= target
+            cb.isChecked = key == exerciseKey || complete
+        }
+        applyManualExerciseSelection(exerciseKey)
+    }
+
+    private fun applyManualExerciseSelection(exerciseKey: String) {
+        val detector = imageProcessor as? PoseDetectorProcessor ?: return
+        detector.setManualExercise(exerciseNameToDisplay(exerciseKey))
+    }
+
+    // Map the notCompletedExercise list to a list of pairs to show gifs
     private fun mapExerciseToDrawable(exercise: String): Int {
         return when (exercise) {
             exerciseNameToDisplay(PUSHUPS_CLASS) -> R.drawable.pushup
             exerciseNameToDisplay(LUNGES_CLASS) -> R.drawable.lunge
             exerciseNameToDisplay(SQUATS_CLASS) -> R.drawable.squats
             exerciseNameToDisplay(SITUP_UP_CLASS) -> R.drawable.situp
+            exerciseNameToDisplay(BICEP_CURL_CLASS) -> R.drawable.dumbell
             exerciseNameToDisplay(CHEST_PRESS_CLASS) -> R.drawable.chest_press_gif
             exerciseNameToDisplay(DEAD_LIFT_CLASS) -> R.drawable.dead_lift_gif
             exerciseNameToDisplay(SHOULDER_PRESS_CLASS) -> R.drawable.shoulder_press_gif
@@ -732,7 +809,13 @@ class WorkOutFragment : Fragment(), MemoryManagement {
                         PreferenceUtils.shouldShowPoseDetectionInFrameLikelihoodLivePreview(
                             requireContext()
                         )
-                    val visualizeZ = PreferenceUtils.shouldPoseDetectionVisualizeZ(requireContext())
+                    // Z-depth coloring overrides form green/red when enabled and analysis is absent.
+                    // Disable it whenever this workout uses squat/push-up form logic.
+                    val usesFormAnalysis =
+                        notCompletedPlan.any { ExerciseLogicFactory.getLogic(it.exercise) != null }
+                    val visualizeZ =
+                        PreferenceUtils.shouldPoseDetectionVisualizeZ(requireContext()) &&
+                            !usesFormAnalysis
                     val rescaleZ =
                         PreferenceUtils.shouldPoseDetectionRescaleZForVisualization(requireContext())
 
@@ -765,6 +848,7 @@ class WorkOutFragment : Fragment(), MemoryManagement {
             ).show()
             return
         }
+        selectedPlanExercise?.let { applyManualExerciseSelection(it) }
         val builder = ImageAnalysis.Builder()
         analysisUseCase = builder.build()
         needUpdateGraphicOverlayImageSourceInfo = true
@@ -1061,6 +1145,7 @@ class WorkOutFragment : Fragment(), MemoryManagement {
         val lunge = TypedConstant(LUNGES_CLASS, 3.0)
         val squat = TypedConstant(SQUATS_CLASS, 3.8)
         val situp = TypedConstant(SITUP_UP_CLASS, 5.0)
+        val bicepCurl = TypedConstant(BICEP_CURL_CLASS, 3.5)
         val chestpress = TypedConstant(CHEST_PRESS_CLASS, 7.0)
         val deadlift = TypedConstant(DEAD_LIFT_CLASS, 10.0)
         val shoulderpress = TypedConstant(SHOULDER_PRESS_CLASS, 9.0)

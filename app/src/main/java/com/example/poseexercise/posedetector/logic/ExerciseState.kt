@@ -20,5 +20,7 @@ data class AnalysisResult(
     val currentState: ExerciseState,
     val formScore: Int,
     val feedback: List<String>,
-    val angles: Map<String, Double>
+    val angles: Map<String, Double>,
+    /** Skeleton segments that should render red this frame. */
+    val incorrectSegments: Set<PoseHighlight> = emptySet(),
 )

@@ -18,6 +18,7 @@ import com.example.poseexercise.posedetector.classification.PoseClassifierProces
 import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.SHOULDER_PRESS_CLASS
 import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.SITUP_UP_CLASS
 import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.SQUATS_CLASS
+import com.example.poseexercise.posedetector.classification.PoseClassifierProcessor.BICEP_CURL_CLASS
 import com.example.poseexercise.util.MyUtils.Companion.databaseNameToClassification
 import java.util.Collections
 
@@ -89,6 +90,7 @@ class PlanAdapter internal constructor(context: Context) :
         LUNGES_CLASS to R.drawable.reverse_lunges,
         SITUP_UP_CLASS to R.drawable.sit_ups,
         PUSHUPS_CLASS to R.drawable.push_up,
+        BICEP_CURL_CLASS to R.drawable.dumbell,
         CHEST_PRESS_CLASS to R.drawable.chest_press,
         DEAD_LIFT_CLASS to R.drawable.dead_lift,
         SHOULDER_PRESS_CLASS to R.drawable.shoulder_press
@@ -97,7 +99,7 @@ class PlanAdapter internal constructor(context: Context) :
     private fun getDrawableResourceIdExercise(exerciseKey: String): Int {
         // Get the image resource ID for the given exercise key
         return exerciseImages[exerciseKey]
-            ?: throw IllegalArgumentException("Invalid yoga pose key: $exerciseKey")
+            ?: throw IllegalArgumentException("Invalid exercise key: $exerciseKey")
     }
 
 }

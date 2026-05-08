@@ -5,10 +5,14 @@ package com.example.poseexercise.posedetector.logic
  */
 object ExerciseLogicFactory {
     fun getLogic(exerciseName: String): ExerciseLogic? {
-        val normalized = exerciseName.lowercase().trim()
+        val normalized = exerciseName.lowercase().trim().replace("_", "")
         return when {
             normalized.contains("squat") -> SquatLogic()
-            normalized.contains("pushup") || normalized.contains("push up") || normalized.contains("pushups_down") -> PushupLogic()
+            normalized.contains("bicep curl") || normalized.contains("bicepcurl") ->
+                BicepCurlLogic()
+            normalized.contains("pushup") ||
+                normalized.contains("push up") ||
+                normalized.contains("pushupsdown") -> PushupLogic()
             else -> null
         }
     }
